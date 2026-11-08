@@ -52,6 +52,8 @@ const settingsItems = [
   { label: 'Payment Settings', href: '/admin/settings/payments', icon: CreditCard },
   { label: 'Shipping Settings', href: '/admin/settings/shipping', icon: Truck },
   { label: 'SEO Settings', href: '/admin/settings/seo', icon: Globe },
+  { label: 'Logo & Favicon', href: '/admin/settings/logo', icon: ImageIcon },
+  { label: 'Footer Editor', href: '/admin/settings/footer', icon: FileText },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
