@@ -1,0 +1,397 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  COMPLETED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  REFUNDED
+  PARTIALLY_REFUNDED
+  FAILED
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum CategoryType {
+  GENERAL
+  FLAVOUR
+  STRENGTH
+}
+
+model User {
+  id          String         @id @default(cuid())
+  firebaseUid String         @unique
+  email       String         @unique
+  name        String?
+  role        Role           @default(CUSTOMER)
+  phone       String?
+  avatar      String?
+  tags        String[]       @default([])
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  addresses   Address[]
+  orders      Order[]
+  reviews     Review[]
+  wishlist    WishlistItem[]
+
+  @@index([email])
+  @@index([firebaseUid])
+  @@index([role])
+}
+
+model Address {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   @default("SHIPPING") // SHIPPING, BILLING
+  firstName   String
+  lastName    String
+  company     String?
+  address1    String
+  address2    String?
+  city        String
+  state       String?
+  postalCode  String
+  country     String   @default("GB")
+  phone       String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Category {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  description String?
+  image       String?
+  icon        String?
+  type        CategoryType @default(GENERAL)
+  parentId    String?
+  parent      Category?    @relation("SubCategories", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[]   @relation("SubCategories")
+  sortOrder   Int          @default(0)
+  isPublished Boolean      @default(true)
+  seoTitle    String?
+  seoDesc     String?
+  products    Product[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([slug])
+  @@index([type])
+  @@index([parentId])
+}
+
+model Brand {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  logo        String?
+  banner      String?
+  description String?
+  website     String?
+  isFeatured  Boolean   @default(false)
+  sortOrder   Int       @default(0)
+  seoTitle    String?
+  seoDesc     String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([slug])
+  @@index([isFeatured])
+}
+
+model Product {
+  id               String           @id @default(cuid())
+  name             String
+  slug             String           @unique
+  sku              String           @unique
+  barcode          String?
+  description      String
+  shortDescription String?
+  price            Float
+  comparePrice     Float?
+  stock            Int              @default(100)
+  weight           Float?           @default(30) // grams
+  featuredImage    String
+  galleryImages    String[]         @default([])
+  brandId          String?
+  brand            Brand?           @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  categoryId       String?
+  category         Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags             String[]         @default([])
+  strength         String? // Light, Medium, Strong, X-Strong, Ultra
+  strengthMg       Float? // e.g. 16, 20, 50
+  flavor           String? // Mint & Ice, Fruit & Berry, Cola & Energy, etc.
+  pouchesPerCan    Int?             @default(20)
+  format           String?          @default("Slim") // Slim, Mini, Large
+  isPublished      Boolean          @default(true)
+  isFeatured       Boolean          @default(false)
+  isPopular        Boolean          @default(false)
+  seoTitle         String?
+  seoDesc          String?
+  variants         ProductVariant[]
+  orderItems       OrderItem[]
+  reviews          Review[]
+  wishlistItems    WishlistItem[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([slug])
+  @@index([sku])
+  @@index([brandId])
+  @@index([categoryId])
+  @@index([strength])
+  @@index([flavor])
+  @@index([isPublished])
+  @@index([isPopular])
+}
+
+model ProductVariant {
+  id           String      @id @default(cuid())
+  productId    String
+  product      Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name         String // e.g. "1 Can", "10 Pack (Roll)", "30 Pack Box"
+  sku          String      @unique
+  price        Float
+  comparePrice Float?
+  stock        Int         @default(100)
+  packSize     Int         @default(1)
+  orderItems   OrderItem[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([productId])
+  @@index([sku])
+}
+
+model Order {
+  id              String          @id @default(cuid())
+  orderNumber     String          @unique // e.g. KNS-10492
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestEmail      String?
+  guestName       String?
+  guestPhone      String?
+  status          OrderStatus     @default(PENDING)
+  paymentStatus   PaymentStatus   @default(UNPAID)
+  paymentMethod   String          @default("STRIPE")
+  paymentIntentId String?
+  subtotal        Float
+  shippingFee     Float           @default(0)
+  discount        Float           @default(0)
+  tax             Float           @default(0)
+  total           Float
+  couponCode      String?
+  notes           String?
+  shippingAddress Json // { firstName, lastName, address1, city, postalCode, country, phone }
+  billingAddress  Json?
+  trackingNumber  String?
+  trackingCarrier String?
+  trackingUrl     String?
+  items           OrderItem[]
+  timeline        OrderTimeline[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([orderNumber])
+  @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  variantName String?
+  name        String
+  sku         String
+  price       Float
+  quantity    Int
+  total       Float
+  image       String?
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderTimeline {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    String
+  title     String
+  message   String?
+  createdBy String?  @default("System")
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model Coupon {
+  id            String     @id @default(cuid())
+  code          String     @unique
+  discountType  CouponType @default(PERCENTAGE)
+  discountValue Float
+  minSpend      Float?
+  maxSpend      Float?
+  maxUses       Int?
+  usedCount     Int        @default(0)
+  expiresAt     DateTime?
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([code])
+  @@index([isActive])
+}
+
+model Review {
+  id                 String   @id @default(cuid())
+  productId          String
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId             String?
+  user               User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  authorName         String
+  authorEmail        String
+  rating             Int      @default(5)
+  title              String?
+  content            String
+  isVerifiedPurchase Boolean  @default(true)
+  isApproved         Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([productId])
+  @@index([isApproved])
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, productId])
+  @@index([userId])
+}
+
+model BlogPost {
+  id            String        @id @default(cuid())
+  title         String
+  slug          String        @unique
+  excerpt       String
+  content       String // Markdown or rich HTML
+  featuredImage String?
+  authorName    String        @default("Editorial Team")
+  categoryId    String?
+  category      BlogCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags          String[]      @default([])
+  isPublished   Boolean       @default(true)
+  readTime      Int           @default(4)
+  seoTitle      String?
+  seoDesc       String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([slug])
+  @@index([isPublished])
+}
+
+model BlogCategory {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  posts     BlogPost[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([slug])
+}
+
+model CMSPage {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  content     String?
+  blocks      Json? // JSON block builder tree
+  isPublished Boolean  @default(true)
+  seoTitle    String?
+  seoDesc     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([slug])
+  @@index([isPublished])
+}
+
+model MediaItem {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  r2Key     String   @unique
+  size      Int
+  mimeType  String
+  folder    String   @default("general")
+  altText   String?
+  createdAt DateTime @default(now())
+
+  @@index([folder])
+  @@index([r2Key])
+}
+
+model NavigationMenu {
+  id        String   @id @default(cuid())
+  name      String   @unique // header_main, footer_quick_links, footer_customer_care
+  items     Json // array of { title, href, target, children }
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StoreSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique // theme, payments, shipping, seo, announcement
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
